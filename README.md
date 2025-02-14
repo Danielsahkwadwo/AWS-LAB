@@ -1,4 +1,3 @@
-# AWS-LAB
 # Automating Creation of IAM Resources LAB
 
 ## Overview
