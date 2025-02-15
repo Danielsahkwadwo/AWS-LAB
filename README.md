@@ -29,8 +29,3 @@ This project provides an automated setup for creating AWS Identity and Access Ma
 - Monitor the creation of IAM resources through AWS CloudFormation console.
 - View logs and events in AWS CloudWatch.
 
-## Contributing
-Contributions are welcome! Please open an issue or submit a pull request for any changes or suggestions.
-
-## License
-This project is licensed under the MIT License.

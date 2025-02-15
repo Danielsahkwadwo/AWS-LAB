@@ -1,13 +1,38 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "IAM Automation Lab - Creates IAM Users, Groups, and EventBridge Rule"
+Description: "IAM Automation Lab - Creates IAM Users, Groups, and EventBridge Rule (Unique Naming)"
+
+Parameters:
+  StackPrefix:
+    Type: String
+    Default: "IAMLab"
+    Description: "Prefix to uniquely identify resources"
+
+  S3UserName:
+    Type: String
+    Default: "s3-user"
+    Description: "IAM username for S3 access"
+
+  EC2UserName:
+    Type: String
+    Default: "ec2-user"
+    Description: "IAM username for EC2 access"
+
+  S3UserEmail:
+    Type: String
+    Default: "s3user@example.com"
+    Description: "Email for the S3 user"
+
+  EC2UserEmail:
+    Type: String
+    Default: "ec2user@example.com"
+    Description: "Email for the EC2 user"
 
 Resources:
-
-  # 1. One-Time Password in Secrets Manager
+  # 1. Unique One-Time Password in Secrets Manager
   TempPasswordSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: "OneTimePassword"
+      Name: !Sub "${StackPrefix}-OneTimePassword-${AWS::StackName}"
       Description: "Temporary password for IAM users"
       GenerateSecretString:
         SecretStringTemplate: '{"Password":"Default@123"}'
@@ -15,13 +40,13 @@ Resources:
         PasswordLength: 12
         ExcludeCharacters: '"@/\'
 
-  # 2. IAM Groups
+  # 2. IAM Groups (Unique Naming)
   S3UserGroup:
     Type: AWS::IAM::Group
     Properties:
-      GroupName: "S3UserGroup"
+      GroupName: !Sub "${StackPrefix}-S3Group-${AWS::StackName}"
       Policies:
-        - PolicyName: "S3ReadAccess"
+        - PolicyName: !Sub "${StackPrefix}-S3ReadPolicy-${AWS::StackName}"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -32,9 +57,9 @@ Resources:
   EC2UserGroup:
     Type: AWS::IAM::Group
     Properties:
-      GroupName: "EC2UserGroup"
+      GroupName: !Sub "${StackPrefix}-EC2Group-${AWS::StackName}"
       Policies:
-        - PolicyName: "EC2ReadAccess"
+        - PolicyName: !Sub "${StackPrefix}-EC2ReadPolicy-${AWS::StackName}"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -46,43 +71,43 @@ Resources:
   S3User:
     Type: AWS::IAM::User
     Properties:
-      UserName: "s3-user"
+      UserName: !Ref S3UserName
       Groups:
         - !Ref S3UserGroup
       LoginProfile:
-        Password: !Sub "{{resolve:secretsmanager:OneTimePassword:SecretString:Password}}"
+        Password: !Sub "{{resolve:secretsmanager:${StackPrefix}-OneTimePassword-${AWS::StackName}:SecretString:Password}}"
         PasswordResetRequired: true
 
   EC2User:
     Type: AWS::IAM::User
     Properties:
-      UserName: "ec2-user"
+      UserName: !Ref EC2UserName
       Groups:
         - !Ref EC2UserGroup
       LoginProfile:
-        Password: !Sub "{{resolve:secretsmanager:OneTimePassword:SecretString:Password}}"
+        Password: !Sub "{{resolve:secretsmanager:${StackPrefix}-OneTimePassword-${AWS::StackName}:SecretString:Password}}"
         PasswordResetRequired: true
 
   # 4. Store User Emails in Parameter Store
-  S3UserEmail:
+  S3UserEmailParam:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: "/IAM/s3-user-email"
+      Name: !Sub "/IAM/${StackPrefix}-${S3UserName}-email-${AWS::StackName}"
       Type: String
-      Value: "s3user@example.com"
+      Value: !Ref S3UserEmail
 
-  EC2UserEmail:
+  EC2UserEmailParam:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: "/IAM/ec2-user-email"
+      Name: !Sub "/IAM/${StackPrefix}-${EC2UserName}-email-${AWS::StackName}"
       Type: String
-      Value: "ec2user@example.com"
+      Value: !Ref EC2UserEmail
 
-  # 5. EventBridge Rule
+  # 5. EventBridge Rule (Unique Naming)
   IAMUserEventRule:
     Type: AWS::Events::Rule
     Properties:
-      Name: "IAMUserCreationRule"
+      Name: !Sub "${StackPrefix}-IAMUserCreationRule-${AWS::StackName}"
       EventPattern:
         source:
           - "aws.iam"
@@ -97,11 +122,11 @@ Resources:
         - Arn: !GetAtt IAMUserLambda.Arn
           Id: "IAMUserLambdaTarget"
 
-  # 6. Lambda Function
+  # 6. Unique Lambda Function
   IAMUserLambda:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: "LogNewIAMUsers"
+      FunctionName: !Sub "${StackPrefix}-LogNewIAMUsers-${AWS::StackName}"
       Runtime: python3.9
       Role: !GetAtt IAMUserLambdaRole.Arn
       Handler: "index.lambda_handler"
@@ -118,23 +143,26 @@ Resources:
               # Extract username from event
               user_name = event['detail']['requestParameters']['userName']
 
-              # Retrieve email and password
-              email_param_name = f"/IAM/{user_name}-email"
-              email = ssm.get_parameter(Name=email_param_name)['Parameter']['Value']
-              temp_password = secretsmanager.get_secret_value(SecretId="OneTimePassword")['SecretString']
+              try:
+                  # Retrieve email and password
+                  email_param_name = f"/IAM/IAMLab-{user_name}-email-{context.invoked_function_arn.split(':')[6]}"
+                  email = ssm.get_parameter(Name=email_param_name)['Parameter']['Value']
+                  temp_password = secretsmanager.get_secret_value(SecretId=f"IAMLab-OneTimePassword-{context.invoked_function_arn.split(':')[6]}")['SecretString']
 
-              # Log the email and password
-              logging.info(f"New User Created: {user_name}")
-              logging.info(f"Email: {email}")
-              logging.info(f"Temporary Password: {temp_password}")
+                  # Log the email and password
+                  logging.info(f"New User Created: {user_name}")
+                  logging.info(f"Email: {email}")
+                  logging.info(f"Temporary Password: {temp_password}")
+              except Exception as e:
+                  logging.error(f"Error retrieving details for {user_name}: {str(e)}")
 
       Timeout: 10
 
-  # IAM Role for Lambda
+  # IAM Role for Lambda (Unique Naming)
   IAMUserLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: "IAMUserLambdaRole"
+      RoleName: !Sub "${StackPrefix}-IAMUserLambdaRole-${AWS::StackName}"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -143,7 +171,7 @@ Resources:
               Service: "lambda.amazonaws.com"
             Action: "sts:AssumeRole"
       Policies:
-        - PolicyName: "LambdaIAMUserLogPolicy"
+        - PolicyName: !Sub "${StackPrefix}-LambdaIAMUserLogPolicy-${AWS::StackName}"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
