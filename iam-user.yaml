@@ -2,11 +2,6 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: "IAM Automation Lab - Creates IAM Users, Groups, and EventBridge Rule (Unique Naming)"
 
 Parameters:
-  StackPrefix:
-    Type: String
-    Default: "IAMLab"
-    Description: "Prefix to uniquely identify resources"
-
   S3UserName:
     Type: String
     Default: "s3-user"
@@ -32,7 +27,7 @@ Resources:
   TempPasswordSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: !Sub "${StackPrefix}-OneTimePassword-${AWS::StackName}"
+      Name: !Sub "OneTimePassword-${AWS::StackName}"
       Description: "Temporary password for IAM users"
       GenerateSecretString:
         SecretStringTemplate: '{"Password":"Default@123"}'
@@ -44,9 +39,9 @@ Resources:
   S3UserGroup:
     Type: AWS::IAM::Group
     Properties:
-      GroupName: !Sub "${StackPrefix}-S3Group-${AWS::StackName}"
+      GroupName: !Sub "S3Group-${AWS::StackName}"
       Policies:
-        - PolicyName: !Sub "${StackPrefix}-S3ReadPolicy-${AWS::StackName}"
+        - PolicyName: !Sub "S3ReadPolicy-${AWS::StackName}"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -57,9 +52,9 @@ Resources:
   EC2UserGroup:
     Type: AWS::IAM::Group
     Properties:
-      GroupName: !Sub "${StackPrefix}-EC2Group-${AWS::StackName}"
+      GroupName: !Sub "EC2Group-${AWS::StackName}"
       Policies:
-        - PolicyName: !Sub "${StackPrefix}-EC2ReadPolicy-${AWS::StackName}"
+        - PolicyName: !Sub "EC2ReadPolicy-${AWS::StackName}"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -75,7 +70,7 @@ Resources:
       Groups:
         - !Ref S3UserGroup
       LoginProfile:
-        Password: !Sub "{{resolve:secretsmanager:${StackPrefix}-OneTimePassword-${AWS::StackName}:SecretString:Password}}"
+        Password: !Sub "{{resolve:secretsmanager:OneTimePassword-${AWS::StackName}:SecretString:Password}}"
         PasswordResetRequired: true
 
   EC2User:
@@ -85,21 +80,21 @@ Resources:
       Groups:
         - !Ref EC2UserGroup
       LoginProfile:
-        Password: !Sub "{{resolve:secretsmanager:${StackPrefix}-OneTimePassword-${AWS::StackName}:SecretString:Password}}"
+        Password: !Sub "{{resolve:secretsmanager:OneTimePassword-${AWS::StackName}:SecretString:Password}}"
         PasswordResetRequired: true
 
   # 4. Store User Emails in Parameter Store
   S3UserEmailParam:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: !Sub "/IAM/${StackPrefix}-${S3UserName}-email-${AWS::StackName}"
+      Name: !Sub "/IAM/s3-user-email-${AWS::StackName}"
       Type: String
       Value: !Ref S3UserEmail
 
   EC2UserEmailParam:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: !Sub "/IAM/${StackPrefix}-${EC2UserName}-email-${AWS::StackName}"
+      Name: !Sub "/IAM/ec2-user-email-${AWS::StackName}"
       Type: String
       Value: !Ref EC2UserEmail
 
@@ -107,7 +102,7 @@ Resources:
   IAMUserEventRule:
     Type: AWS::Events::Rule
     Properties:
-      Name: !Sub "${StackPrefix}-IAMUserCreationRule-${AWS::StackName}"
+      Name: !Sub "IAMUserCreationRule-${AWS::StackName}"
       EventPattern:
         source:
           - "aws.iam"
@@ -126,7 +121,7 @@ Resources:
   IAMUserLambda:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub "${StackPrefix}-LogNewIAMUsers-${AWS::StackName}"
+      FunctionName: !Sub "LogNewIAMUsers-${AWS::StackName}"
       Runtime: python3.9
       Role: !GetAtt IAMUserLambdaRole.Arn
       Handler: "index.lambda_handler"
@@ -145,9 +140,9 @@ Resources:
 
               try:
                   # Retrieve email and password
-                  email_param_name = f"/IAM/IAMLab-{user_name}-email-{context.invoked_function_arn.split(':')[6]}"
+                  email_param_name = f"/IAM/{user_name}-email-{context.invoked_function_arn.split(':')[6]}"
                   email = ssm.get_parameter(Name=email_param_name)['Parameter']['Value']
-                  temp_password = secretsmanager.get_secret_value(SecretId=f"IAMLab-OneTimePassword-{context.invoked_function_arn.split(':')[6]}")['SecretString']
+                  temp_password = secretsmanager.get_secret_value(SecretId=f"OneTimePassword-{context.invoked_function_arn.split(':')[6]}")['SecretString']
 
                   # Log the email and password
                   logging.info(f"New User Created: {user_name}")
@@ -162,7 +157,7 @@ Resources:
   IAMUserLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${StackPrefix}-IAMUserLambdaRole-${AWS::StackName}"
+      RoleName: !Sub "IAMUserLambdaRole-${AWS::StackName}"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -171,7 +166,7 @@ Resources:
               Service: "lambda.amazonaws.com"
             Action: "sts:AssumeRole"
       Policies:
-        - PolicyName: !Sub "${StackPrefix}-LambdaIAMUserLogPolicy-${AWS::StackName}"
+        - PolicyName: !Sub "LambdaIAMUserLogPolicy-${AWS::StackName}"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
