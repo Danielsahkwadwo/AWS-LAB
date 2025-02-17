@@ -1,0 +1,7 @@
+template-file-path: iam-user.yaml
+parameters:
+  S3UserName: samuel
+  EC2UserName: danny
+  S3UserEmail: samuel@gmail.com
+  EC2UserEmail: dannyquan@gmail.com
+tags: {}
